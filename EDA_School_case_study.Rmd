@@ -1,5 +1,5 @@
 ---
-title: "Exploratory data analysis - School Peformance"
+title: "Exploratory data analysis - School Performance"
 author: "sundar pradeep"
 output: html_document
 runtime: shiny
@@ -48,6 +48,8 @@ Following datasets were used for the analysis
 
 ```{r, echo=FALSE, message = FALSE, warning = FALSE }
 
+# set-up environment, load and clean input files. 
+
 setwd("~/dev/Projects/1_EDA_NYC_school_data/")
 
 library("dplyr")
@@ -60,8 +62,7 @@ library("leaps")
 library("ggthemes")
 library("gridExtra")
 
-
-# 1. load files.
+# load files.
 source("./1_load_files.R")
 
 # clean and generate tidy data for analysis.
@@ -94,6 +95,7 @@ nzv <- nearZeroVar(district.level.data)
 subset.data <- district.level.data[,-c(6:9,14)]
 lm.subset <- lm(total.percent ~. ,data=subset.data)
 vifResult <- vif(lm.subset)
+# no variables to drop
 
 ```
 
@@ -106,7 +108,6 @@ vifResult <- vif(lm.subset)
 `Class size` <br>
 `Poverty` and  <br>
 `Gender Ratio`
-
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
 features.select <- regsubsets(total.percent ~ ., data = district.level.data[,-14])
 par(mfrow=c(1,2))
@@ -158,10 +159,10 @@ When a regression plot on school performance was plotted against class size and 
 
 ```{r, echo=FALSE,message=FALSE,warning=FALSE}
 
-povertyPlot <- qplot(poverty.ratio,total.percent,data=district.model.features, xlab="Poverty Ratio",ylab="Score",main="Performance Vs Poverty") + 
+povertyPlot <- qplot(poverty.ratio,total.percent,data=scaled.district.data, xlab="Poverty Ratio",ylab="Score",main="Performance Vs Poverty") + 
   geom_smooth(method=lm,formula=y~poly(x,2)) +theme_economist()
 
-sizePlot <- qplot(size,total.percent,data=district.model.features,xlab="Class Size",ylab="Score",main="Performance Vs Class size ") +
+sizePlot <- qplot(size,total.percent,data=scaled.district.data,xlab="Class Size",ylab="Score",main="Performance Vs Class size ") +
   geom_smooth(method=lm,formula=y~poly(x,2)) +theme_economist()
 
 grid.arrange(povertyPlot, sizePlot, ncol=2)
@@ -186,21 +187,11 @@ qplot(poverty.ratio,size,colour=sizegroup,size=poverty.ratio, data=scaled.distri
 Clearly, most of the schools in poorer neighborhoods have smaller class sizes than the school districts that are better off. <br>
 <br>
 
-This surprising relationship was confirmed by a simple analysis of variance between these two attributes.
-
-<br>
-
-```{r,echo=FALSE,warning=FALSE}
-anova(lm(size ~ povertygroup,data=scaled.district.data))
-
-```
-
-<br>
 I decided to look for explanation and came across ["Contracts for Excellence Legislation"](http://schools.nyc.gov/AboutUs/funding/c4e/default.htm) .
 
 This legislation funded a set of initiatives over a 5 yr period from 2007, including reduction of class size, focused on poor neighborhoods and schools performing below state standards. 
 
-Our findings confirm that some action seems to have been taken under the legislation since 2007 as reflectef in the 2010 class size data , and that most of the poor neighborhood / low performance shools have comparitively smaller class sizes .<br>
+Our findings confirm that some action seems to have been taken under the legislation since 2007 as reflected in the 2010 class size data , and that most of the poor neighborhood / low performance schools have comparatively smaller class sizes .<br>
 
 <br>
 
@@ -211,19 +202,35 @@ Let us check by comparing the performance of the 2010 class with 2014 class from
 <br>
 
 
-Let us take a look at performance change of class size groups by comparing 2010 scores against 2014 for each subject (Math , Reading and Writing).
+Let us take a look at performance change of class size groups by comparing total 2014 scores against 2010  by class size group .
+
+
+```{r,echo=FALSE,warning=FALSE}
+
+scaled.district.data <- mutate(scaled.district.data, score.change = ((total.percent.2014-total.percent)/total.percent))
+
+boxplot(score.change~sizegroup,data=scaled.district.data,
+            main="Change in 2014 score Vs 2010", 
+            xlab="Class Size", ylab="Score Change",
+            col=c("lightgreen","lightblue","lightyellow","orange"),
+            notch = TRUE,outline=FALSE)
+```
+
+Looking at the overlap in notches in the box plot across size groups , there seems to be no significant improvement in scores for the classes with smaller sizes. 
+
+Considering the fact that the city is making significant investments towards reducing class sizes with an objective to improve school performance, it will be interesting to check if there are any changes in scores at a subject level (Math , Reading and Writing) , before rejecting the influence of class size reduction on performance improvement..
 
 <br>
 
 #### Change in Math performance by class size group:
 
-Linear model and plot comparing the change in math score (2010 vs 2014) is shown below. There seems to be **no visible improvement in the math performance** of schools with smaller classes over this period.
+Linear model and plot comparing the change in math score (2014 vs 2010) is shown below. There is **no statistically significant improvement in the math performance** of schools with smaller classes over this period.
 
 
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
 
-lm.math.size <- lm(chMath ~ math.sizegroup, data=scaled.school.data)
-anova(lm.math.size)
+lm.mathChange <- lm(chMath ~ math.size, data=scaled.school.data)
+summary(lm.mathChange)
 
 math.plot <- qplot(math.size,chMath,data=scaled.school.data,color=math.sizegroup, xlab="class size - Math",ylab="change in score")+geom_point()+geom_smooth()
 math.plot+theme_bw()
@@ -236,13 +243,16 @@ math.plot+theme_bw()
 
 #### Change in Reading performance by class size group:
 
-Linear model and plot comparing the change in reading score (2010 vs 2014) is shown below. There seems to be **no visible improvement in the reading performance** of schools with smaller classes over this period.
+Linear model and plot comparing the change in reading score (2014 vs 2010) is shown below. There is **no statistically significant improvement in the reading performance** of schools with smaller classes over this period.
 
 
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
 
-lm.reading.size <- lm(chReading ~ reading.sizegroup , data=scaled.school.data)
-anova(lm.reading.size)  
+
+
+lm.readingChange <- lm(chReading ~ english.size, data=scaled.school.data)
+summary(lm.readingChange)
+
 
 reading.plot <- qplot(english.size,chReading,data=scaled.school.data,color=reading.sizegroup, xlab="class size - Reading",ylab="change in score")+geom_point()+geom_smooth()
 reading.plot+theme_bw()
@@ -253,12 +263,12 @@ reading.plot+theme_bw()
 
 #### Change in Writing performance by class size group:
 
-Linear model and plot comparing the change in writing score (2010 vs 2014) is shown below. There seems to be **no visible improvement in the writing performance** of schools with smaller classes over this period.
+Linear model and plot comparing the change in writing score (2014 vs 2010) is shown below. There is **no statistically significant improvement in the writing performance** of schools with smaller classes over this period.
 
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
 
-lm.writing.size <- lm(chWriting ~ english.size , data=scaled.school.data)
-anova(lm.writing.size)  
+lm.writingChange <- lm(chWriting ~ english.size, data=scaled.school.data)
+summary(lm.writingChange)
 
 writing.plot <- qplot(english.size,chWriting,data=scaled.school.data,color=writing.sizegroup, xlab="class size - Writing",ylab="change in score")+geom_point()+geom_smooth()
 writing.plot+theme_bw()
@@ -266,23 +276,23 @@ writing.plot+theme_bw()
 
 
 
-Looking at the p-values, there is no confirmation that the smaller class sizes have resulted in a statistically significant improvement in student performance over a three year period.
+After a detailed analysis of the change in score trends by class size , there is no confirmation that the smaller class sizes have resulted in a statistically significant improvement in student performance over a three year period.
 
 
 <br>
 
 #### Conclusion:
 
-* Of all the factors analysed , only poverty seems to have a significant impact in school performance - more than any other factor , including ethnic background. 
+* Of all the factors analysed, only poverty ration seems to have the most significant impact on school performance - more than any other factor , including ethnic background. 
 Hence , economic background should be an important factor in any affirmative action considerations for college admissions to offset the disadvantage.  <br>
 
-* NYC administration has tried to do its bit by reducing the class sizes to help students from impoverished background , but there is no clear evidence to show that smaller classes have helped improve the performance.<br>
+* NYC administration has tried to do its bit by reducing the class sizes to help students from impoverished background , but there is no clear evidence to show that smaller classes have helped improve the performance of low performance schools.<br>
   
 <br>
 
 #### References:
 
-Github [Source Code](https://github.com/sundarpradeep/projects/blob/master/EDA_School_Performance.Rmd)
+Github [Source Code](https://github.com/sundarpradeep/1_EDA_NYC_Schools)
 
 <br>
 <br>
