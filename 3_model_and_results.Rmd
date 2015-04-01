@@ -1,18 +1,18 @@
 ---
-title: "Exploratory data analysis - School Performance"
+title: "EDA : NYC School Performance, Poverty and Class size Analysis"
 author: "sundar pradeep"
+date: "March 26, 2015"
 output: html_document
-runtime: shiny
 ---
 
 <br>
 
 #### Synopsis: 
 
-Considering the importance of education in an increasingly knowledge based economy, I performed an exploratory data analysis of school performance in relation to various attributes that might potentially have an influence, with the following objectives. <br>
+Considering the importance of education in an increasingly knowledge based economy, I performed an exploratory data analysis of school performance in relation to various attributes, with the following objectives. <br>
 
 * Understand what attributes actually influence school performance. <br>
-* Analyse if our current affirmative action plans and college admission policies reflect such influence.
+* Analyse if our current affirmative action plans and college admission policies reflect any consideration for such an influence.
 
 <br>
 
@@ -34,7 +34,7 @@ Analysis was restricted to `NYC puclic schools` ( comprising 32 school districts
 *  `English language learners ratio` <br>
 <br>
 
-  `SAT score.` covering Math , Reading and Writing was used as an indicator of school performance.
+  `SAT score` covering Math , Reading and Writing was used as an indicator of school performance.
    
 Following datasets were used for the analysis 
 
@@ -49,8 +49,8 @@ Following datasets were used for the analysis
 ```{r, echo=FALSE, message = FALSE, warning = FALSE }
 
 # set-up environment, load and clean input files. 
-
-setwd("~/dev/Projects/1_EDA_NYC_school_data/")
+#getwd()
+#setwd("~/dev/Projects/1_EDA_NYC_school_data/")
 
 library("dplyr")
 library("plyr")
@@ -78,6 +78,10 @@ source("./2_tidy.R")
 * All source datasets were merged by District-id:School-id to create the master file. 
 * The dataset was scaled and centered as the features measured are vastly different- for example , poverty ratio is in percentage , class size in tens and SAT scores in hundreds .
 * Data set was checked for Near-Zero variance attributes using `nearZeroVar` function, so they can be dropped from feature set, there were none . 
+```{r,echo=FALSE,  message=FALSE, warning=FALSE}
+nearZeroVar(district.level.data)
+```
+
 * Data set was checked for highly correlated variables using `vif` function, so they can be dropped from feature set, there were none . 
 
 
@@ -86,7 +90,6 @@ source("./2_tidy.R")
 # model 
 # check for Near Zero Variance Predictors
 #head(nearZeroVar(district.level.data, saveMetrics = TRUE))
-nzv <- nearZeroVar(district.level.data)
 #colnames(district.level.data)[nzv] # no near zero variables to drop.
 
 
@@ -94,7 +97,7 @@ nzv <- nearZeroVar(district.level.data)
 
 subset.data <- district.level.data[,-c(6:9,14)]
 lm.subset <- lm(total.percent ~. ,data=subset.data)
-vifResult <- vif(lm.subset)
+vif(lm.subset)
 # no variables to drop
 
 ```
@@ -104,21 +107,43 @@ vifResult <- vif(lm.subset)
 
 #### Feature Selection: 
 
-`regsubsets` was for used feature selection - following 3 features out of the total 8 feature, were picked up by regsubsets as features that have some influence on SAT scores<br>
-`Class size` <br>
-`Poverty` and  <br>
-`Gender Ratio`
+`regsubsets` was for used feature selection. 
+
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
 features.select <- regsubsets(total.percent ~ ., data = district.level.data[,-14])
-par(mfrow=c(1,2))
-plot(features.select, scale="adjr2")
-plot(features.select, scale="bic")
-par(mfrow=c(1,1))
+
+df <- data.frame(
+    est = c(summary(features.select)$cp,summary(features.select)$bic,summary(features.select)$adjr2),
+    x = rep(1:8, 3),
+    type = rep(c("cp", "bic","adjr2"), each = 8)
+) 
+qplot(x, est, data = df, geom = "line" , color=type) +
+    theme_bw() + facet_grid(type ~ ., scales = "free_y")
+
 ```
 
+The following 2 features out of the total 8 feature, were picked up by regsubsets as features that have some influence on SAT scores<br>
+`Class size` <br>
+`Poverty`.
 
 
-To cross validate, feature selection was repeated with `steps`  - the same 3 features were picked up by `steps` function as well.
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+par(mfrow=c(1,3))
+plot(features.select, scale="adjr2")
+plot(features.select, scale="bic")
+plot(features.select, scale="Cp")
+par(mfrow=c(1,1))
+
+coef(features.select, 2)
+
+```
+
+<br>
+<br>
+
+
+To cross validate, feature selection process was repeated with `leaps::steps`  - the same 2 features were picked up by `steps` function as well.
 
 
 ```{r,  echo=FALSE, message=FALSE, warning=FALSE,results='hide' }
@@ -132,25 +157,23 @@ school.step <- step(null, scope=list(upper=full),data=district.model.features, d
 
 
 ```{r,  echo=FALSE, message=FALSE, warning=FALSE }
-school.step$coef
+summary(school.step)$coefficients
 ```
 
 
 
 <br>
 
-#### Influence of Poverty , Class size and gender ratio over school performance:
+#### Influence of Poverty and Class size over school performance:
 
-A linear regression of School Performance with these three variables as the predictors was performed. 
 
 
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
-lm.performance <- lm(total.percent ~ poverty.ratio+size+female.ratio, data=scaled.district.data)
-summary(lm.performance)
+#A linear regression of School Performance with `class-size` and `poverty`as the predictors was performed. 
+#lm.performance <- lm(total.percent ~ poverty.ratio+size, data=scaled.district.data)
+#summary(lm.performance)$coefficients
 ```
-<br>
 
-Only `class-size` and `poverty` features displayed statistically significant influence and hence gender-ratio was dropped from further analysis. 
 
 I decided to take a closer look on the impact of these two key attributes on the overall performance. <br>
 When a regression plot on school performance was plotted against class size and poverty, the result was **a surprise**. <br>
@@ -179,7 +202,12 @@ Taking a second look at these plots , the impact of class size over school perfo
 <br>
 
 ```{r,echo=FALSE,warning=FALSE}
-qplot(poverty.ratio,size,colour=sizegroup,size=poverty.ratio, data=scaled.district.data,xlab="Poverty Ratio", ylab="class size") + theme_bw()
+qplot(poverty.ratio,size,colour=sizegroup,size=poverty.ratio, 
+      data=scaled.district.data,xlab="Poverty Ratio", 
+      main="Class size Vs Poverty",ylab="class size") + theme_bw()
+
+summary(lm(size ~ poverty.ratio , data = scaled.district.data))$coefficients
+
 ```
 
 
@@ -187,20 +215,18 @@ qplot(poverty.ratio,size,colour=sizegroup,size=poverty.ratio, data=scaled.distri
 Clearly, most of the schools in poorer neighborhoods have smaller class sizes than the school districts that are better off. <br>
 <br>
 
-I decided to look for explanation and came across ["Contracts for Excellence Legislation"](http://schools.nyc.gov/AboutUs/funding/c4e/default.htm) .
+I searched for explanation and came across ["Contracts for Excellence Legislation"](http://schools.nyc.gov/AboutUs/funding/c4e/default.htm) , which was possibly the confounding factor.
 
-This legislation funded a set of initiatives over a 5 yr period from 2007, including reduction of class size, focused on poor neighborhoods and schools performing below state standards. 
+This legislation funded a set of initiatives over from 2007-08, including reduction of class size, focused on poor neighborhoods and schools performing below state standards. 
 
-Our findings confirm that some action seems to have been taken under the legislation since 2007 as reflected in the 2010 class size data , and that most of the poor neighborhood / low performance schools have comparatively smaller class sizes .<br>
+Our finding that most of the poor neighborhood / low performance schools have comparatively smaller class sizes may be explained by action taken under the legislation since 2007 as reflected in the 2010 class size data.<br>
 
 <br>
 
 #### This background presents an interesting question to explore.
 
-Have smaller class sizes really helped to improve the performance of the school districts compared to those with bigger class sizes? <br>
-Let us check by comparing the performance of the 2010 class with 2014 class from these schools with smaller class sizes. 
+If NYC Department of Education is funding this class size reduction initiative to improve school performance - have smaller class sizes really helped to improve the performance of these target schools compared to those with bigger class sizes? 
 <br>
-
 
 Let us take a look at performance change of class size groups by comparing total 2014 scores against 2010  by class size group .
 
@@ -218,9 +244,10 @@ boxplot(score.change~sizegroup,data=scaled.district.data,
 
 Looking at the overlap in notches in the box plot across size groups , there seems to be no significant improvement in scores for the classes with smaller sizes. 
 
-Considering the fact that the city is making significant investments towards reducing class sizes with an objective to improve school performance, it will be interesting to check if there are any changes in scores at a subject level (Math , Reading and Writing) , before rejecting the influence of class size reduction on performance improvement..
+It might also be worthwhile to check if there are any improvements in subject level score for individual schools (Math , Reading and Writing) , which could potentially have been lost while analyzing district level total scores above..
 
 <br>
+
 
 #### Change in Math performance by class size group:
 
@@ -230,7 +257,7 @@ Linear model and plot comparing the change in math score (2014 vs 2010) is shown
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
 
 lm.mathChange <- lm(chMath ~ math.size, data=scaled.school.data)
-summary(lm.mathChange)
+summary(lm.mathChange)$coefficients
 
 math.plot <- qplot(math.size,chMath,data=scaled.school.data,color=math.sizegroup, xlab="class size - Math",ylab="change in score")+geom_point()+geom_smooth()
 math.plot+theme_bw()
@@ -251,7 +278,7 @@ Linear model and plot comparing the change in reading score (2014 vs 2010) is sh
 
 
 lm.readingChange <- lm(chReading ~ english.size, data=scaled.school.data)
-summary(lm.readingChange)
+summary(lm.readingChange)$coefficients
 
 
 reading.plot <- qplot(english.size,chReading,data=scaled.school.data,color=reading.sizegroup, xlab="class size - Reading",ylab="change in score")+geom_point()+geom_smooth()
@@ -268,7 +295,7 @@ Linear model and plot comparing the change in writing score (2014 vs 2010) is sh
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
 
 lm.writingChange <- lm(chWriting ~ english.size, data=scaled.school.data)
-summary(lm.writingChange)
+summary(lm.writingChange)$coefficients
 
 writing.plot <- qplot(english.size,chWriting,data=scaled.school.data,color=writing.sizegroup, xlab="class size - Writing",ylab="change in score")+geom_point()+geom_smooth()
 writing.plot+theme_bw()
@@ -283,10 +310,9 @@ After a detailed analysis of the change in score trends by class size , there is
 
 #### Conclusion:
 
-* Of all the factors analysed, only poverty ration seems to have the most significant impact on school performance - more than any other factor , including ethnic background. 
-Hence , economic background should be an important factor in any affirmative action considerations for college admissions to offset the disadvantage.  <br>
+* Of all the factors analysed, `poverty` ratio seems to have the most significant impact on school performance - more than any other factor , including ethnic background. Hence , economic background should be an important factor in any affirmative action considerations for college admissions to offset the disadvantage.  <br>
 
-* NYC administration has tried to do its bit by reducing the class sizes to help students from impoverished background , but there is no clear evidence to show that smaller classes have helped improve the performance of low performance schools.<br>
+* NYC administration has tried to do its bit by reducing the class sizes to help students from impoverished background , but there is no clear evidence to demonstrate that smaller classes help improve performance of low performance schools.<br>
   
 <br>
 
